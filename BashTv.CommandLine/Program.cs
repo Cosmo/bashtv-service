@@ -1,47 +1,83 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
+
 using Newtonsoft.Json.Linq;
 
 namespace BashTv.CommandLine
 {
     class Program
     {
-        private const string EpgRequestUrlFormat = "http://www.br.de/mediathek/video/programm/mediathek-programm-100~hal_date-{0}_vlt-epg_vt-medcc1_-83b61b034ab981e93a40b0f0057b7528f706f848.json";
+        private const string GuideRequestUrl = "http://www.br.de/mediathek/video/programm/mediathek-programm-100~hal_vt-medcc1_-bff08c03fe069a9ee9013704adcbd4855992ad2a.json";
 
         static void Main(string[] args)
         {
-            var epgRequestUrl = string.Format(EpgRequestUrlFormat, "2015-12-21");
             var client = new WebClient();
-            var json = client.DownloadString(epgRequestUrl);
-            var epg = JObject.Parse(json);
-
-            var items = new JArray();
-            var brChannel = epg["channels"]["channel_28107"];
-            var channelTitle = brChannel["channelTitle"].ToString();
-            var channelBroadcasts = brChannel["broadcasts"];
-            var unixEpochTime = new DateTime(1970, 1, 1);
-            foreach (var broadcast in channelBroadcasts)
+            var guideJson = client.DownloadString(GuideRequestUrl);
+            var guide = JObject.Parse(guideJson);
+            var epgDayLinks = guide["epgDays"]["_links"];
+            var tidyGuides = new Dictionary<string, JArray>();
+            var channelIdNameMap = new Dictionary<string, string>
             {
-                var headline = broadcast["headline"].ToString();
-                var subTitle = broadcast["subTitle"].ToString();
-                var broadcastStartDate = DateTime.Parse(broadcast["broadcastStartDate"].ToString());
+                { "channel_28107", "br" },
+                { "channel_28487", "ard-alpha" }
+            };
 
-                var item = new JObject();
-                item["channelTitle"] = channelTitle;
-                item["broadcastStartDate"] = broadcastStartDate.Subtract(unixEpochTime).TotalSeconds;
-                item["headline"] = headline;
-                item["subTitle"] = subTitle;
+            foreach (var link in epgDayLinks.Children().Take(10))
+            {
+                var href = link.First["href"].ToString();
+                Console.WriteLine("Fetching '" +  href + "'");
 
-                items.Add(item);
+                var json = client.DownloadString(href);
+                var epg = JObject.Parse(json);
+                var items = new JArray();
+                var channels = epg["channels"];
+
+                foreach (var channel in channels)
+                {
+                    var channelId = ((JProperty)channel).Name;
+                    var channelProperties = ((JProperty)channel).Value;
+                    var channelTitle = channelProperties["channelTitle"].ToString();
+                    var channelBroadcasts = channelProperties["broadcasts"];
+                    var unixEpochTime = new DateTime(1970, 1, 1);
+                    foreach (var broadcast in channelBroadcasts)
+                    {
+                        var headline = broadcast["headline"].ToString();
+                        var subTitle = broadcast["subTitle"].ToString();
+                        var broadcastStartDate = DateTime.Parse(broadcast["broadcastStartDate"].ToString());
+                        var broadcastEndDate = DateTime.Parse(broadcast["broadcastEndDate"].ToString());
+                        var duration = broadcastEndDate - broadcastStartDate;
+
+                        var item = new JObject();
+                        item["channel"] = channelTitle;
+                        item["start"] = (int)broadcastStartDate.Subtract(unixEpochTime).TotalSeconds;
+                        item["end"] = (int)broadcastEndDate.Subtract(unixEpochTime).TotalSeconds;
+                        item["duration"] = (int) duration.TotalSeconds;
+                        item["title"] = headline;
+                        item["episode"] = subTitle;
+                        items.Add(item);
+                    }
+
+                    var readableChannelName = channelIdNameMap[channelId];
+                    if (tidyGuides.ContainsKey(readableChannelName))
+                    {
+                        var existingItems = tidyGuides[readableChannelName];
+                        foreach (var item in items)
+                        {
+                            existingItems.Add(item);
+                        }
+                    }
+                    else
+                        tidyGuides.Add(readableChannelName, items);
+                }
             }
 
-            Console.WriteLine(items.ToString());
-            Console.ReadKey();
+            foreach (var tidyGuide in tidyGuides)
+            {
+                File.WriteAllText(tidyGuide.Key + ".json", tidyGuide.Value.ToString());
+            }
         }
     }
 }
