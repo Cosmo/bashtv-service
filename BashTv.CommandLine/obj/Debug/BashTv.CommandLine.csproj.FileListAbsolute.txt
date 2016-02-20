@@ -13,4 +13,3 @@ C:\Projects\bashtv-service\BashTv.CommandLine\bin\Debug\BashTv.CommandLine.exe
 C:\Projects\bashtv-service\BashTv.CommandLine\bin\Debug\BashTv.CommandLine.pdb
 C:\Projects\bashtv-service\BashTv.CommandLine\bin\Debug\Newtonsoft.Json.dll
 C:\Projects\bashtv-service\BashTv.CommandLine\bin\Debug\Newtonsoft.Json.xml
-C:\Projects\bashtv-service\BashTv.CommandLine\obj\Debug\BashTv.CommandLine.csprojResolveAssemblyReference.cache

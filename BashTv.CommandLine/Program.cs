@@ -30,8 +30,8 @@ namespace BashTv.CommandLine
                 var href = link.First["href"].ToString();
                 Console.WriteLine("Fetching '" +  href + "'");
 
-                var json = client.DownloadString(href);
-                var epg = JObject.Parse(json);
+                var epgJson = client.DownloadString(href);
+                var epg = JObject.Parse(epgJson);
                 var items = new JArray();
                 var channels = epg["channels"];
 
@@ -50,6 +50,17 @@ namespace BashTv.CommandLine
                         var broadcastEndDate = DateTime.Parse(broadcast["broadcastEndDate"].ToString());
                         var duration = broadcastEndDate - broadcastStartDate;
 
+                        var broadcastLinks = broadcast["_links"];
+                        if (broadcastLinks == null) continue;
+
+                        var livestream = broadcastLinks["livestream"];
+                        var livestreamHref = livestream["href"].ToString();
+                        var livestreamJson = client.DownloadString(livestreamHref);
+                        var livestreams = JObject.Parse(livestreamJson);
+                        var hlsLivestream = livestreams["assets"].FirstOrDefault(x => x["type"].ToString() == "HLS");
+                        if (hlsLivestream == null) continue;
+                        var hlsLivestreamHref = hlsLivestream["_links"]["stream"]["href"].ToString();
+
                         var item = new JObject();
                         item["channel"] = channelTitle;
                         item["start"] = (int)broadcastStartDate.Subtract(unixEpochTime).TotalSeconds;
@@ -57,6 +68,7 @@ namespace BashTv.CommandLine
                         item["duration"] = (int) duration.TotalSeconds;
                         item["title"] = headline;
                         item["episode"] = subTitle;
+                        item["streamUrl"] = hlsLivestreamHref;
                         items.Add(item);
                     }
 
