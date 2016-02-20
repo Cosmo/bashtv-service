@@ -14,6 +14,7 @@ namespace BashTv.CommandLine
 
         static void Main(string[] args)
         {
+            var i = 1;
             var client = new WebClient();
             var guideJson = client.DownloadString(GuideRequestUrl);
             var guide = JObject.Parse(guideJson);
@@ -30,6 +31,7 @@ namespace BashTv.CommandLine
                 var href = link.First["href"].ToString();
                 Console.WriteLine("Fetching '" +  href + "'");
 
+                client = new WebClient();
                 var epgJson = client.DownloadString(href);
                 var epg = JObject.Parse(epgJson);
                 var items = new JArray();
@@ -53,6 +55,21 @@ namespace BashTv.CommandLine
                         var broadcastLinks = broadcast["_links"];
                         if (broadcastLinks == null) continue;
 
+                        var video = broadcastLinks["video"];
+                        string frameHeight180VideoHref = null;
+                        if (video != null)
+                        {
+                            client = new WebClient();
+                            var videoHref = video["href"].ToString();
+                            var videoJson = client.DownloadString(videoHref);
+                            var videos = JObject.Parse(videoJson);
+                            var videoAssets = videos["assets"];
+                            var frameHeight180Video = videoAssets?.FirstOrDefault(x => x["frameHeight"]?.ToString() == "180");
+                            if (frameHeight180Video == null) continue;
+                            frameHeight180VideoHref = frameHeight180Video["_links"]["download"]["href"].ToString();
+                        }
+
+                        client = new WebClient();
                         var livestream = broadcastLinks["livestream"];
                         var livestreamHref = livestream["href"].ToString();
                         var livestreamJson = client.DownloadString(livestreamHref);
@@ -62,13 +79,15 @@ namespace BashTv.CommandLine
                         var hlsLivestreamHref = hlsLivestream["_links"]["stream"]["href"].ToString();
 
                         var item = new JObject();
+                        item["id"] = i++;
                         item["channel"] = channelTitle;
                         item["start"] = (int)broadcastStartDate.Subtract(unixEpochTime).TotalSeconds;
                         item["end"] = (int)broadcastEndDate.Subtract(unixEpochTime).TotalSeconds;
                         item["duration"] = (int) duration.TotalSeconds;
                         item["title"] = headline;
                         item["episode"] = subTitle;
-                        item["streamUrl"] = hlsLivestreamHref;
+                        item["videoUrl"] = frameHeight180VideoHref;
+                        item["livestreamUrl"] = hlsLivestreamHref;
                         items.Add(item);
                     }
 
